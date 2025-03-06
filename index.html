@@ -3,18 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Om</title>
+    <title>WebRTC Video Chat</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/x-icon" href="">
+    <!-- Include Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
-    <h1>Omegle Clone</h1>
+    <h1>WebRTC Video Chat</h1>
     <div class="video-container">
         <video id="localVideo" autoplay muted></video>
         <video id="remoteVideo" autoplay></video>
     </div>
     <button id="disconnectButton">Disconnect</button>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script src="main.js"></script>
+
+    <script>
+        const socket = io('https://omb-5yvy.onrender.com'); // Replace with your backend URL
+
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const disconnectButton = document.getElementById('disconnectButton');
+
+        let peerConnection;
+        let localStream;
+        let isCaller = false; // Track if this peer is the caller
+        let iceCandidateQueue = []; // Queue for ICE candidates
+
+        // Get user media
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then((stream) => {
+                localVideo.srcObject = stream;
+                localStream = stream;
+
+                // Handle pairing after localStream is available
+                socket.on('paired', (partnerId) => {
+                    console.log('Paired with:', partnerId);
+                    createPeerConnection(partnerId);
+
+                    // Only the caller creates an offer
+                    if (!isCaller) {
+                        isCaller = true;
+                        createOffer(partnerId);
+                    }
+                });
+            })
+            .catch((error) => {
+                console.error('Error accessing media devices:', error);
+                alert('Please allow access to your camera and microphone to use this app.');
+            });
+
+        // Create peer connection
+        function createPeerConnection(partnerId) {
+            peerConnection = new RTCPeerConnection({
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' } // Free STUN server
+                ]
+            });
+
+            // Add local stream to peer connection
+            localStream.getTracks().forEach((track) => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // Handle remote stream
+            peerConnection.ontrack = (event) => {
+                remoteVideo.srcObject = event.streams[0];
+            };
+
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('signal', { to: partnerId, signal: { type: 'candidate', candidate: event.candidate } });
+                }
+            };
+        }
+
+        // Create and send offer
+        function createOffer(partnerId) {
+            peerConnection.createOffer()
+                .then((offer) => peerConnection.setLocalDescription(offer))
+                .then(() => {
+                    socket.emit('signal', { to: partnerId, signal: { type: 'offer', offer: peerConnection.localDescription } });
+                })
+                .catch((error) => {
+                    console.error('Error creating offer:', error);
+                });
+        }
+
+        // Handle signaling messages
+        socket.on('signal', (data) => {
+            if (!peerConnection) {
+                console.error("PeerConnection is not initialized yet.");
+                return;
+            }
+
+            if (data.signal.type === 'offer') {
+                if (peerConnection.signalingState !== 'stable') {
+                    console.warn('Cannot handle offer: Signaling state is not stable');
+                    return;
+                }
+                peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer))
+                    .then(() => peerConnection.createAnswer())
+                    .then((answer) => peerConnection.setLocalDescription(answer))
+                    .then(() => {
+                        socket.emit('signal', { to: data.from, signal: { type: 'answer', answer: peerConnection.localDescription } });
+                    })
+                    .catch((error) => {
+                        console.error('Error handling offer:', error);
+                    });
+            } else if (data.signal.type === 'answer') {
+                if (peerConnection.signalingState !== 'have-local-offer') {
+                    console.warn('Cannot handle answer: Signaling state is not have-local-offer');
+                    return;
+                }
+                peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer))
+                    .then(() => {
+                        processIceCandidates(); // Process queued ICE candidates
+                    })
+                    .catch((error) => {
+                        console.error('Error handling answer:', error);
+                    });
+            } else if (data.signal.type === 'candidate') {
+                if (!peerConnection.remoteDescription) {
+                    // Queue ICE candidates if remote description is not set
+                    iceCandidateQueue.push(data.signal.candidate);
+                } else {
+                    peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate))
+                        .catch((error) => {
+                            console.error('Error adding ICE candidate:', error);
+                        });
+                }
+            }
+        });
+
+        // Process queued ICE candidates
+        function processIceCandidates() {
+            iceCandidateQueue.forEach(candidate => {
+                peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+                    .catch(error => console.error("Error adding queued ICE candidate:", error));
+            });
+            iceCandidateQueue = []; // Clear the queue
+        }
+
+        // Handle disconnect
+        disconnectButton.addEventListener('click', () => {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            remoteVideo.srcObject = null;
+            socket.emit('user_disconnect'); // Use a custom event name
+        });
+    </script>
 </body>
 </html>
