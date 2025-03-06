@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> Video Chat</title>
+    <title>Video Chat</title>
     <link rel="stylesheet" href="styles.css">
     <!-- Include Socket.IO -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -34,22 +34,23 @@
                 localVideo.srcObject = stream;
                 localStream = stream;
 
-                // Handle pairing after localStream is available
-                socket.on('paired', (partnerId) => {
-                    console.log('Paired with:', partnerId);
-                    createPeerConnection(partnerId);
-
-                    // Only the caller creates an offer
-                    if (!isCaller) {
-                        isCaller = true;
-                        createOffer(partnerId);
-                    }
-                });
+                // Signal that the user is ready to connect with a random peer
+                socket.emit('ready-to-connect');
             })
             .catch((error) => {
                 console.error('Error accessing media devices:', error);
                 alert('Please allow access to your camera and microphone to use this app.');
             });
+
+        // Handle random pairing (connected to another random peer)
+        socket.on('paired', (partnerId) => {
+            console.log('Paired with:', partnerId);
+            createPeerConnection(partnerId);
+            if (!isCaller) {
+                isCaller = true;
+                createOffer(partnerId);  // Initiates the connection
+            }
+        });
 
         // Create peer connection
         function createPeerConnection(partnerId) {
