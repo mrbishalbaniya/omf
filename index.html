@@ -75,6 +75,14 @@
                     socket.emit('signal', { to: partnerId, signal: { type: 'candidate', candidate: event.candidate } });
                 }
             };
+
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', peerConnection.iceConnectionState);
+                if (peerConnection.iceConnectionState === 'failed') {
+                    console.error('ICE connection failed');
+                    disconnect();
+                }
+            };
         }
 
         // Create and send offer
@@ -101,6 +109,7 @@
                     console.warn('Cannot handle offer: Signaling state is not stable');
                     return;
                 }
+
                 peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer))
                     .then(() => peerConnection.createAnswer())
                     .then((answer) => peerConnection.setLocalDescription(answer))
@@ -115,6 +124,7 @@
                     console.warn('Cannot handle answer: Signaling state is not have-local-offer');
                     return;
                 }
+
                 peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer))
                     .then(() => {
                         processIceCandidates(); // Process queued ICE candidates
@@ -145,13 +155,17 @@
         }
 
         // Handle disconnect
-        disconnectButton.addEventListener('click', () => {
+        function disconnect() {
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
             }
             remoteVideo.srcObject = null;
             socket.emit('user_disconnect'); // Use a custom event name
+        }
+
+        disconnectButton.addEventListener('click', () => {
+            disconnect();
         });
     </script>
 </body>
