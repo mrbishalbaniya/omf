@@ -7,6 +7,7 @@ const disconnectButton = document.getElementById('disconnectButton');
 let peerConnection;
 let localStream;
 let isCaller = false; // Track if this peer is the caller
+let iceCandidateQueue = []; // Queue for ICE candidates
 
 // Get user media
 navigator.mediaDevices.getUserMedia({ video: true, audio: true })
@@ -91,14 +92,29 @@ socket.on('signal', (data) => {
             return;
         }
         peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer))
+            .then(() => {
+                // Process queued ICE candidates
+                iceCandidateQueue.forEach((candidate) => {
+                    peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+                        .catch((error) => {
+                            console.error('Error adding queued ICE candidate:', error);
+                        });
+                });
+                iceCandidateQueue = []; // Clear the queue
+            })
             .catch((error) => {
                 console.error('Error handling answer:', error);
             });
     } else if (data.signal.type === 'candidate') {
-        peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate))
-            .catch((error) => {
-                console.error('Error adding ICE candidate:', error);
-            });
+        if (!peerConnection.remoteDescription) {
+            // Queue ICE candidates if remote description is not set
+            iceCandidateQueue.push(data.signal.candidate);
+        } else {
+            peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate))
+                .catch((error) => {
+                    console.error('Error adding ICE candidate:', error);
+                });
+        }
     }
 });
 
