@@ -6,6 +6,7 @@ const disconnectButton = document.getElementById('disconnectButton');
 
 let peerConnection;
 let localStream;
+let isCaller = false; // Track if this peer is the caller
 
 // Get user media
 navigator.mediaDevices.getUserMedia({ video: true, audio: true })
@@ -17,6 +18,12 @@ navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         socket.on('paired', (partnerId) => {
             console.log('Paired with:', partnerId);
             createPeerConnection(partnerId);
+
+            // Only the caller creates an offer
+            if (!isCaller) {
+                isCaller = true;
+                createOffer(partnerId);
+            }
         });
     })
     .catch((error) => {
@@ -48,8 +55,10 @@ function createPeerConnection(partnerId) {
             socket.emit('signal', { to: partnerId, signal: { type: 'candidate', candidate: event.candidate } });
         }
     };
+}
 
-    // Create and send offer
+// Create and send offer
+function createOffer(partnerId) {
     peerConnection.createOffer()
         .then((offer) => peerConnection.setLocalDescription(offer))
         .then(() => {
@@ -102,19 +111,3 @@ disconnectButton.addEventListener('click', () => {
     remoteVideo.srcObject = null;
     socket.emit('user_disconnect'); // Use a custom event name
 });
-
-navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-    .then((stream) => {
-        localVideo.srcObject = stream;
-        localStream = stream;
-
-        // Handle pairing after localStream is available
-        socket.on('paired', (partnerId) => {
-            console.log('Paired with:', partnerId);
-            createPeerConnection(partnerId);
-        });
-    })
-    .catch((error) => {
-        console.error('Error accessing media devices:', error);
-        alert('Please allow access to your camera and microphone to use this app.');
-    });
