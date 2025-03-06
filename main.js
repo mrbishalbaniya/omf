@@ -7,7 +7,6 @@ const disconnectButton = document.getElementById('disconnectButton');
 let peerConnection;
 let localStream;
 let isCaller = false; // Track if this peer is the caller
-let iceCandidateQueue = []; // Queue for ICE candidates
 
 // Get user media
 navigator.mediaDevices.getUserMedia({ video: true, audio: true })
@@ -74,7 +73,8 @@ function createOffer(partnerId) {
 socket.on('signal', (data) => {
     if (data.signal.type === 'offer') {
         if (peerConnection.signalingState !== 'stable') {
-            console.warn('Cannot handle offer: Signaling state is not stable');
+            console.warn('Signaling state is not stable, retrying in 500ms...');
+            setTimeout(() => socket.emit('signal', data), 500); // Delay offer handling
             return;
         }
         peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer))
@@ -92,29 +92,14 @@ socket.on('signal', (data) => {
             return;
         }
         peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer))
-            .then(() => {
-                // Process queued ICE candidates
-                iceCandidateQueue.forEach((candidate) => {
-                    peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
-                        .catch((error) => {
-                            console.error('Error adding queued ICE candidate:', error);
-                        });
-                });
-                iceCandidateQueue = []; // Clear the queue
-            })
             .catch((error) => {
                 console.error('Error handling answer:', error);
             });
     } else if (data.signal.type === 'candidate') {
-        if (!peerConnection.remoteDescription) {
-            // Queue ICE candidates if remote description is not set
-            iceCandidateQueue.push(data.signal.candidate);
-        } else {
-            peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate))
-                .catch((error) => {
-                    console.error('Error adding ICE candidate:', error);
-                });
-        }
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate))
+            .catch((error) => {
+                console.error('Error adding ICE candidate:', error);
+            });
     }
 });
 
