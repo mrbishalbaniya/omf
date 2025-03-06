@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Video Chat</title>
     <link rel="stylesheet" href="styles.css">
-    <!-- Include Socket.IO -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
@@ -25,22 +24,20 @@
 
         let peerConnection;
         let localStream;
-        let isCaller = false; // Track if this peer is the caller
-        let iceCandidateQueue = []; // Queue for ICE candidates
+        let isCaller = false;
+        let iceCandidateQueue = [];
 
-        // Get user media
+        // Get user media (camera + mic)
         navigator.mediaDevices.getUserMedia({ video: true, audio: true })
             .then((stream) => {
                 localVideo.srcObject = stream;
                 localStream = stream;
 
-                // Handle pairing after localStream is available
                 socket.on('paired', (partnerId) => {
                     console.log('Paired with:', partnerId);
                     createPeerConnection(partnerId);
 
-                    // Only the caller creates an offer
-                    if (!isCaller) {
+                    if (!isCaller) { // Ensure only one peer creates the offer
                         isCaller = true;
                         createOffer(partnerId);
                     }
@@ -48,28 +45,21 @@
             })
             .catch((error) => {
                 console.error('Error accessing media devices:', error);
-                alert('Please allow access to your camera and microphone to use this app.');
+                alert('Please allow access to your camera and microphone.');
             });
 
-        // Create peer connection
+        // Create Peer Connection
         function createPeerConnection(partnerId) {
             peerConnection = new RTCPeerConnection({
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' } // Free STUN server
-                ]
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
             });
 
-            // Add local stream to peer connection
-            localStream.getTracks().forEach((track) => {
-                peerConnection.addTrack(track, localStream);
-            });
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-            // Handle remote stream
             peerConnection.ontrack = (event) => {
                 remoteVideo.srcObject = event.streams[0];
             };
 
-            // Handle ICE candidates
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
                     socket.emit('signal', { to: partnerId, signal: { type: 'candidate', candidate: event.candidate } });
@@ -83,18 +73,9 @@
                     disconnect();
                 }
             };
-
-            // Ensure that signaling state is updated and ready before processing further
-            peerConnection.onsignalingstatechange = () => {
-                console.log('Signaling state:', peerConnection.signalingState);
-                if (peerConnection.signalingState === 'stable') {
-                    // Proceed with handling offers and answers once signaling state is stable
-                    console.log('Signaling state is stable, ready to process signaling messages');
-                }
-            };
         }
 
-        // Create and send offer
+        // Create Offer (Caller)
         function createOffer(partnerId) {
             if (peerConnection.signalingState !== 'stable') {
                 console.warn('Cannot create offer: Signaling state is not stable');
@@ -112,51 +93,55 @@
         }
 
         // Handle signaling messages
-        socket.on('signal', (data) => {
+        socket.on('signal', async (data) => {
             if (!peerConnection) {
                 console.error("PeerConnection is not initialized yet.");
                 return;
             }
 
             if (data.signal.type === 'offer') {
-                // Check if signaling state is stable before handling the offer
                 if (peerConnection.signalingState !== 'stable') {
                     console.warn('Cannot handle offer: Signaling state is not stable');
                     return;
                 }
 
-                peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer))
-                    .then(() => peerConnection.createAnswer())
-                    .then((answer) => peerConnection.setLocalDescription(answer))
-                    .then(() => {
-                        socket.emit('signal', { to: data.from, signal: { type: 'answer', answer: peerConnection.localDescription } });
-                    })
-                    .catch((error) => {
-                        console.error('Error handling offer:', error);
+                try {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+
+                    socket.emit('signal', { 
+                        to: data.from, 
+                        signal: { type: 'answer', answer: peerConnection.localDescription } 
                     });
-            } else if (data.signal.type === 'answer') {
-                // Ensure we're in the right signaling state to handle an answer
+                } catch (error) {
+                    console.error('Error handling offer:', error);
+                }
+            } 
+
+            else if (data.signal.type === 'answer') {
                 if (peerConnection.signalingState !== 'have-local-offer') {
                     console.warn('Cannot handle answer: Signaling state is not have-local-offer');
                     return;
                 }
 
-                peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer))
-                    .then(() => {
-                        processIceCandidates(); // Process queued ICE candidates
-                    })
-                    .catch((error) => {
-                        console.error('Error handling answer:', error);
-                    });
-            } else if (data.signal.type === 'candidate') {
+                try {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer));
+                    processIceCandidates();
+                } catch (error) {
+                    console.error('Error handling answer:', error);
+                }
+            } 
+
+            else if (data.signal.type === 'candidate') {
                 if (!peerConnection.remoteDescription) {
-                    // Queue ICE candidates if remote description is not set
                     iceCandidateQueue.push(data.signal.candidate);
                 } else {
-                    peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate))
-                        .catch((error) => {
-                            console.error('Error adding ICE candidate:', error);
-                        });
+                    try {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate));
+                    } catch (error) {
+                        console.error('Error adding ICE candidate:', error);
+                    }
                 }
             }
         });
@@ -167,22 +152,23 @@
                 peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
                     .catch(error => console.error("Error adding queued ICE candidate:", error));
             });
-            iceCandidateQueue = []; // Clear the queue
+            iceCandidateQueue = [];
         }
 
-        // Handle disconnect
+        // Disconnect function
         function disconnect() {
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
             }
             remoteVideo.srcObject = null;
-            socket.emit('user_disconnect'); // Use a custom event name
+            socket.emit('user_disconnect');
         }
 
         disconnectButton.addEventListener('click', () => {
             disconnect();
         });
+
     </script>
 </body>
 </html>
