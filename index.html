@@ -34,23 +34,22 @@
                 localVideo.srcObject = stream;
                 localStream = stream;
 
-                // Signal that the user is ready to connect with a random peer
-                socket.emit('ready-to-connect');
+                // Handle pairing after localStream is available
+                socket.on('paired', (partnerId) => {
+                    console.log('Paired with:', partnerId);
+                    createPeerConnection(partnerId);
+
+                    // Only the caller creates an offer
+                    if (!isCaller) {
+                        isCaller = true;
+                        createOffer(partnerId);
+                    }
+                });
             })
             .catch((error) => {
                 console.error('Error accessing media devices:', error);
                 alert('Please allow access to your camera and microphone to use this app.');
             });
-
-        // Handle random pairing (connected to another random peer)
-        socket.on('paired', (partnerId) => {
-            console.log('Paired with:', partnerId);
-            createPeerConnection(partnerId);
-            if (!isCaller) {
-                isCaller = true;
-                createOffer(partnerId);  // Initiates the connection
-            }
-        });
 
         // Create peer connection
         function createPeerConnection(partnerId) {
@@ -111,6 +110,7 @@
             }
 
             if (data.signal.type === 'offer') {
+                // Check if signaling state is stable before handling the offer
                 if (peerConnection.signalingState !== 'stable') {
                     console.warn('Cannot handle offer: Signaling state is not stable');
                     return;
@@ -126,6 +126,7 @@
                         console.error('Error handling offer:', error);
                     });
             } else if (data.signal.type === 'answer') {
+                // Ensure we're in the right signaling state to handle an answer
                 if (peerConnection.signalingState !== 'have-local-offer') {
                     console.warn('Cannot handle answer: Signaling state is not have-local-offer');
                     return;
