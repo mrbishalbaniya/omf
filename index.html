@@ -87,6 +87,11 @@
 
         // Create and send offer
         function createOffer(partnerId) {
+            if (peerConnection.signalingState !== 'stable') {
+                console.warn('Cannot create offer: Signaling state is not stable');
+                return;
+            }
+
             peerConnection.createOffer()
                 .then((offer) => peerConnection.setLocalDescription(offer))
                 .then(() => {
