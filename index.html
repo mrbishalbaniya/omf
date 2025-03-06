@@ -83,6 +83,15 @@
                     disconnect();
                 }
             };
+
+            // Ensure that signaling state is updated and ready before processing further
+            peerConnection.onsignalingstatechange = () => {
+                console.log('Signaling state:', peerConnection.signalingState);
+                if (peerConnection.signalingState === 'stable') {
+                    // Proceed with handling offers and answers once signaling state is stable
+                    console.log('Signaling state is stable, ready to process signaling messages');
+                }
+            };
         }
 
         // Create and send offer
