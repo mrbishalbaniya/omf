@@ -4,57 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebRTC Video Chat</title>
-    <style>
-        .video-container {
-            display: flex;
-            flex-direction: row;
-            justify-content: space-between;
-        }
-        video {
-            width: 45%;
-            height: auto;
-        }
-        #chatContainer {
-            display: none;
-            margin-top: 20px;
-        }
-        #messageBox {
-            width: 100%;
-            height: 150px;
-            overflow-y: auto;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-        }
-        #messageInput {
-            width: calc(100% - 80px);
-            padding: 10px;
-        }
-        button {
-            margin: 10px 0;
-            padding: 10px;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Include Socket.IO -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <h1>WebRTC Video Chat</h1>
-    <div>
-        <button id="videoCallButton">Start Video Call</button>
-        <button id="audioCallButton">Start Audio Call</button>
-        <button id="chatButton">Start Chat</button>
-        <button id="disconnectButton">Disconnect</button>
-    </div>
-
     <div class="video-container">
         <video id="localVideo" autoplay muted></video>
         <video id="remoteVideo" autoplay></video>
     </div>
-
-    <div id="chatContainer">
-        <div id="messageBox"></div>
-        <input type="text" id="messageInput" placeholder="Type a message..." />
-        <button id="sendMessageButton">Send</button>
-    </div>
+    <button id="disconnectButton">Disconnect</button>
 
     <script>
         const socket = io('https://omb-5yvy.onrender.com'); // Replace with your backend URL
@@ -62,13 +22,6 @@
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const disconnectButton = document.getElementById('disconnectButton');
-        const videoCallButton = document.getElementById('videoCallButton');
-        const audioCallButton = document.getElementById('audioCallButton');
-        const chatButton = document.getElementById('chatButton');
-        const chatContainer = document.getElementById('chatContainer');
-        const messageBox = document.getElementById('messageBox');
-        const messageInput = document.getElementById('messageInput');
-        const sendMessageButton = document.getElementById('sendMessageButton');
 
         let peerConnection;
         let localStream;
@@ -199,39 +152,6 @@
             }
             remoteVideo.srcObject = null;
             socket.emit('user_disconnect'); // Use a custom event name
-        });
-
-        // Start video call
-        videoCallButton.addEventListener('click', () => {
-            socket.emit('start_video_call');
-            chatContainer.style.display = 'none'; // Hide chat
-        });
-
-        // Start audio call
-        audioCallButton.addEventListener('click', () => {
-            socket.emit('start_audio_call');
-            chatContainer.style.display = 'none'; // Hide chat
-        });
-
-        // Start text chat
-        chatButton.addEventListener('click', () => {
-            chatContainer.style.display = 'block'; // Show chat
-        });
-
-        // Send a message
-        sendMessageButton.addEventListener('click', () => {
-            const message = messageInput.value.trim();
-            if (message !== '') {
-                socket.emit('chat_message', { message });
-                messageInput.value = ''; // Clear the input
-            }
-        });
-
-        // Display incoming chat messages
-        socket.on('chat_message', (data) => {
-            const messageElement = document.createElement('div');
-            messageElement.textContent = data.message;
-            messageBox.appendChild(messageElement);
         });
     </script>
 </body>
