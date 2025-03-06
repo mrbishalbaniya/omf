@@ -3,61 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Video Chat</title>
+    <title>Video Chat App</title>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
         .video-container {
             display: flex;
-            flex-direction: row;
-            justify-content: space-between;
+            width: 100%;
+            justify-content: center;
+            gap: 20px;
         }
+
         video {
             width: 45%;
-            height: auto;
+            height: 300px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-        #chatContainer {
-            display: none;
-            margin-top: 20px;
-        }
-        #messageBox {
+
+        .chat-container {
             width: 100%;
-            height: 150px;
-            overflow-y: auto;
-            margin-bottom: 10px;
+            margin-top: 20px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .messages-box {
+            width: 100%;
+            max-width: 600px;
+            height: 200px;
             border: 1px solid #ccc;
-        }
-        #messageInput {
-            width: calc(100% - 80px);
+            overflow-y: auto;
             padding: 10px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
         }
-        button {
-            margin: 10px 0;
+
+        .input-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .input-container input {
+            width: 85%;
             padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+
+        .input-container button {
+            width: 10%;
+            background-color: #5bc0de;
+            border: none;
+            padding: 10px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 4px;
+        }
+
+        .button-container {
+            margin: 20px 0;
+            display: flex;
+            gap: 20px;
+        }
+
+        .button-container button {
+            background-color: #007bff;
+            padding: 15px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+        }
+
+        .button-container button:hover {
+            background-color: #0056b3;
+        }
+
+        .footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #888;
         }
     </style>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
-    <h1>WebRTC Video Chat</h1>
-    <div>
-        <button id="videoCallButton">Start Video Call</button>
-        <button id="audioCallButton">Start Audio Call</button>
-        <button id="chatButton">Start Chat</button>
-        <button id="disconnectButton">Disconnect</button>
+    <div class="container">
+        <div class="header">
+            <div>WebRTC Video Chat</div>
+            <div>
+                <button id="disconnectButton">Disconnect</button>
+            </div>
+        </div>
+
+        <div class="video-container">
+            <video id="localVideo" autoplay muted></video>
+            <video id="remoteVideo" autoplay></video>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="messages-box" id="messageBox"></div>
+            <div class="input-container">
+                <input type="text" id="messageInput" placeholder="Type a message...">
+                <button id="sendMessageButton">Send</button>
+            </div>
+        </div>
+
+        <div class="button-container">
+            <button id="videoCallButton">Start Video Call</button>
+            <button id="audioCallButton">Start Audio Call</button>
+            <button id="chatButton">Start Chat</button>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2025 Video Chat App | Made with ❤️</p>
+        </div>
     </div>
 
-    <div class="video-container">
-        <video id="localVideo" autoplay muted></video>
-        <video id="remoteVideo" autoplay></video>
-    </div>
-
-    <div id="chatContainer">
-        <div id="messageBox"></div>
-        <input type="text" id="messageInput" placeholder="Type a message..." />
-        <button id="sendMessageButton">Send</button>
-    </div>
-
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        const socket = io('https://omb-5yvy.onrender.com'); // Replace with your backend URL
+        const socket = io('https://your-backend-url'); // Replace with your backend URL
 
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
@@ -72,21 +172,18 @@
 
         let peerConnection;
         let localStream;
-        let isCaller = false; // Track if this peer is the caller
-        let iceCandidateQueue = []; // Queue for ICE candidates
+        let isCaller = false;
+        let iceCandidateQueue = [];
 
-        // Get user media
         navigator.mediaDevices.getUserMedia({ video: true, audio: true })
             .then((stream) => {
                 localVideo.srcObject = stream;
                 localStream = stream;
 
-                // Handle pairing after localStream is available
                 socket.on('paired', (partnerId) => {
                     console.log('Paired with:', partnerId);
                     createPeerConnection(partnerId);
 
-                    // Only the caller creates an offer
                     if (!isCaller) {
                         isCaller = true;
                         createOffer(partnerId);
@@ -98,25 +195,21 @@
                 alert('Please allow access to your camera and microphone to use this app.');
             });
 
-        // Create peer connection
         function createPeerConnection(partnerId) {
             peerConnection = new RTCPeerConnection({
                 iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' } // Free STUN server
+                    { urls: 'stun:stun.l.google.com:19302' }
                 ]
             });
 
-            // Add local stream to peer connection
             localStream.getTracks().forEach((track) => {
                 peerConnection.addTrack(track, localStream);
             });
 
-            // Handle remote stream
             peerConnection.ontrack = (event) => {
                 remoteVideo.srcObject = event.streams[0];
             };
 
-            // Handle ICE candidates
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
                     socket.emit('signal', { to: partnerId, signal: { type: 'candidate', candidate: event.candidate } });
@@ -124,7 +217,6 @@
             };
         }
 
-        // Create and send offer
         function createOffer(partnerId) {
             peerConnection.createOffer()
                 .then((offer) => peerConnection.setLocalDescription(offer))
@@ -136,18 +228,8 @@
                 });
         }
 
-        // Handle signaling messages
         socket.on('signal', (data) => {
-            if (!peerConnection) {
-                console.error("PeerConnection is not initialized yet.");
-                return;
-            }
-
             if (data.signal.type === 'offer') {
-                if (peerConnection.signalingState !== 'stable') {
-                    console.warn('Cannot handle offer: Signaling state is not stable');
-                    return;
-                }
                 peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.offer))
                     .then(() => peerConnection.createAnswer())
                     .then((answer) => peerConnection.setLocalDescription(answer))
@@ -158,20 +240,15 @@
                         console.error('Error handling offer:', error);
                     });
             } else if (data.signal.type === 'answer') {
-                if (peerConnection.signalingState !== 'have-local-offer') {
-                    console.warn('Cannot handle answer: Signaling state is not have-local-offer');
-                    return;
-                }
                 peerConnection.setRemoteDescription(new RTCSessionDescription(data.signal.answer))
                     .then(() => {
-                        processIceCandidates(); // Process queued ICE candidates
+                        processIceCandidates();
                     })
                     .catch((error) => {
                         console.error('Error handling answer:', error);
                     });
             } else if (data.signal.type === 'candidate') {
                 if (!peerConnection.remoteDescription) {
-                    // Queue ICE candidates if remote description is not set
                     iceCandidateQueue.push(data.signal.candidate);
                 } else {
                     peerConnection.addIceCandidate(new RTCIceCandidate(data.signal.candidate))
@@ -182,52 +259,45 @@
             }
         });
 
-        // Process queued ICE candidates
         function processIceCandidates() {
             iceCandidateQueue.forEach(candidate => {
                 peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
                     .catch(error => console.error("Error adding queued ICE candidate:", error));
             });
-            iceCandidateQueue = []; // Clear the queue
+            iceCandidateQueue = [];
         }
 
-        // Handle disconnect
         disconnectButton.addEventListener('click', () => {
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
             }
             remoteVideo.srcObject = null;
-            socket.emit('user_disconnect'); // Use a custom event name
+            socket.emit('user_disconnect');
         });
 
-        // Start video call
         videoCallButton.addEventListener('click', () => {
             socket.emit('start_video_call');
-            chatContainer.style.display = 'none'; // Hide chat
+            chatContainer.style.display = 'none';
         });
 
-        // Start audio call
         audioCallButton.addEventListener('click', () => {
             socket.emit('start_audio_call');
-            chatContainer.style.display = 'none'; // Hide chat
+            chatContainer.style.display = 'none';
         });
 
-        // Start text chat
         chatButton.addEventListener('click', () => {
-            chatContainer.style.display = 'block'; // Show chat
+            chatContainer.style.display = 'block';
         });
 
-        // Send a message
         sendMessageButton.addEventListener('click', () => {
             const message = messageInput.value.trim();
             if (message !== '') {
                 socket.emit('chat_message', { message });
-                messageInput.value = ''; // Clear the input
+                messageInput.value = '';
             }
         });
 
-        // Display incoming chat messages
         socket.on('chat_message', (data) => {
             const messageElement = document.createElement('div');
             messageElement.textContent = data.message;
