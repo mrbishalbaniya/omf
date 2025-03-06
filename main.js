@@ -1,4 +1,4 @@
-const socket = io('https://omf-nlbs.onrender.com'); // Replace with your backend URL
+const socket = io('https://omb-5yvy.onrender.com'); // Replace with your backend URL
 
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
